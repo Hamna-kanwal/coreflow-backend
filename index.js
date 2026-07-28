@@ -109,25 +109,19 @@ cron.schedule("* * * * *", async () => {
   }
 });
 
-// ==========================================
-// 6. SERVER START
-// ==========================================
-// ==========================================
-// 6. SERVER START & EXPORTS
-// ==========================================
-// ==========================================
-// 6. SERVER START & EXPORTS
-// ==========================================
-// ==========================================
-// 6. SERVER START & EXPORTS
-// ==========================================
-
-// ==========================================
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => {
-  console.log(`API Server running at port ${PORT}`);
-});
 
-// Vercel ke liye export lazmi hai
+connectDB()
+  .then(() => {
+    console.log("✅ MongoDB Connected Successfully");
+    app.listen(PORT, () => {
+      console.log(`API Server running at port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB Connection Failed:", err);
+    process.exit(1);
+  });
+
 module.exports = app;
 module.exports.pusher = pusher;
