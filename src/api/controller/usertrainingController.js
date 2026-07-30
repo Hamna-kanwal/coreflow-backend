@@ -8,48 +8,47 @@ const jwt = require("jsonwebtoken");
 const selectTraining = async (req, res) => {
   try {
     const userId = req.user.id;
-    // Yahan hum trainingId ki bajaye trainingIds (array) expect kar rahe hain
-    const { trainingIds, level, mainExerciseId, isContentOnly } = req.body;
+    const { trainingId, level, mainExerciseId, isContentOnly } = req.body;
 
-    // Check karein ke trainingIds array maujood hai aur khali nahi hai
-    if (!trainingIds || !Array.isArray(trainingIds) || trainingIds.length === 0) {
-      return res.status(400).json({ message: "Training IDs array required", success: false });
+    if (!trainingId) {
+      return res.status(400).json({ message: "Training ID required", success: false });
     }
+
+    // 1. Training ka base record fetch karein taake isContentOnly ki default value mil sake
+    const adminTraining = await Training.findById(trainingId);
+    if (!adminTraining) {
+      return res.status(404).json({ message: "Training not found", success: false });
+    }
+
+    const exerciseCount = await Exercise.countDocuments({ trainingId: trainingId });
+    const hasMainExercises = exerciseCount > 0;
+
+    let selection = await UserTraining.findOne({ userId, trainingId });
 
     let updatedUserToken = null;
-    const savedSelections = [];
 
-    // Har training ID ke liye loop chalayein
-    for (const trainingId of trainingIds) {
-      // 1. Admin Training ka base record fetch karein
-      const adminTraining = await Training.findById(trainingId);
-      if (!adminTraining) {
-        continue; // Agar koi training na mile toh skip kardein ya error de dein
-      }
+    if (selection) {
+      selection.level = level || selection.level;
+      if (mainExerciseId) selection.mainExerciseId = mainExerciseId;
 
-      let selection = await UserTraining.findOne({ userId, trainingId });
+      // Request mein value ho to wo lein, nahi toh adminTraining wali lein
+      selection.isContentOnly = (isContentOnly !== undefined) ? isContentOnly : adminTraining.isContentOnly;
 
-      if (selection) {
-        selection.level = level || selection.level;
-        if (mainExerciseId) selection.mainExerciseId = mainExerciseId;
-        selection.isContentOnly = (isContentOnly !== undefined) ? isContentOnly : adminTraining.isContentOnly;
-
-        await selection.save();
-      } else {
-        selection = await UserTraining.create({
-          userId,
-          trainingId,
-          level: level || "Beginner",
-          mainExerciseId,
-          isContentOnly: (isContentOnly !== undefined) ? isContentOnly : adminTraining.isContentOnly
-        });
-      }
-      savedSelections.push(selection);
+      await selection.save();
+    } else {
+      selection = await UserTraining.create({
+        userId,
+        trainingId,
+        level: level || "Beginner",
+        mainExerciseId,
+        // Yahan bhi logic apply karein
+        isContentOnly: (isContentOnly !== undefined) ? isContentOnly : adminTraining.isContentOnly
+      });
     }
 
-    // Update main User.level from the saved selections
+    // Update main User.level from the saved selection (use selection.level whether provided or defaulted)
     try {
-      const newLevel = level || null;
+      const newLevel = selection.level || level || null;
       if (newLevel) {
         await User.findByIdAndUpdate(userId, { level: newLevel });
 
@@ -68,9 +67,10 @@ const selectTraining = async (req, res) => {
     }
 
     const responsePayload = {
-      message: "Trainings selected successfully ✅",
+      message: "Training selected successfully ✅",
       success: true,
-      selections: savedSelections
+      hasMainExercises,
+      selection
     };
 
     if (updatedUserToken) responsePayload.token = updatedUserToken;
