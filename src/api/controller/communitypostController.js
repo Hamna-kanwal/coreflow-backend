@@ -24,15 +24,6 @@ const createPost = async (req, res) => {
     const categoryExists = await CommunityCategory.findById(categoryId);
     if (!categoryExists) return res.status(404).json({ success: false, message: "Category not found" });
 
-    const cleanDescription = description.trim();
-    if (!/^[A-Za-z0-9 ,.]+$/.test(cleanDescription))
-      return res.status(400).json({ success: false, message: "Description can contain only letters, numbers, spaces, commas, and dots" });
-
-    const existingPost = await CommunityPost.findOne({
-      description: { $regex: new RegExp(`^${cleanDescription}$`, "i") },
-    });
-    if (existingPost) return res.status(400).json({ success: false, message: "Description already exists" });
-
     let imageUrl = null;
     let videoUrl = null;
 
@@ -50,7 +41,7 @@ const createPost = async (req, res) => {
     const post = await CommunityPost.create({
       userId,
       categoryId,
-      description: cleanDescription,
+      description: description.trim(),
       image: imageUrl,
       videoPlaybackId: videoUrl,
       likes: [],
@@ -60,7 +51,7 @@ const createPost = async (req, res) => {
 
     await triggerNotification({
       title: "New Community Post!",
-      message: `A new post was shared in ${categoryExists.title}: "${cleanDescription.substring(0, 30)}..."`,
+      message: `A new post was shared in ${categoryExists.title}: "${description.trim().substring(0, 30)}..."`,
       type: "system",
       referenceId: post._id,
       image: imageUrl || null
