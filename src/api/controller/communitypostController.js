@@ -24,6 +24,15 @@ const createPost = async (req, res) => {
     const categoryExists = await CommunityCategory.findById(categoryId);
     if (!categoryExists) return res.status(404).json({ success: false, message: "Category not found" });
 
+    const cleanDescription = description.trim();
+    if (!/^[A-Za-z0-9 ,.]+$/.test(cleanDescription))
+      return res.status(400).json({ success: false, message: "Description can contain only letters, numbers, spaces, commas, and dots" });
+
+    const existingPost = await CommunityPost.findOne({
+      description: { $regex: new RegExp(`^${cleanDescription}$`, "i") },
+    });
+    if (existingPost) return res.status(400).json({ success: false, message: "Description already exists" });
+
     let imageUrl = null;
     let videoUrl = null;
 
@@ -41,7 +50,7 @@ const createPost = async (req, res) => {
     const post = await CommunityPost.create({
       userId,
       categoryId,
-      description: description.trim(),
+      description: cleanDescription,
       image: imageUrl,
       videoPlaybackId: videoUrl,
       likes: [],
@@ -51,7 +60,7 @@ const createPost = async (req, res) => {
 
     await triggerNotification({
       title: "New Community Post!",
-      message: `A new post was shared in ${categoryExists.title}: "${description.trim().substring(0, 30)}..."`,
+      message: `A new post was shared in ${categoryExists.title}: "${cleanDescription.substring(0, 30)}..."`,
       type: "system",
       referenceId: post._id,
       image: imageUrl || null
@@ -226,7 +235,7 @@ const addComment = async (req, res) => {
 const getPosts = async (req, res) => {
   try {
     const currentUserId = req.user.id;
-    const { categoryId, postType } = req.query; // postType: "admin" | "user" | undefined
+    const { categoryId, postType } = req.query;
 
     if (!categoryId || !mongoose.Types.ObjectId.isValid(categoryId)) {
       return res.status(400).json({ success: false, message: "Valid categoryId query parameter is required" });
@@ -247,7 +256,6 @@ const getPosts = async (req, res) => {
     
     const reportedPostIds = reportedEntries.map(entry => entry.targetPostId.toString());
 
-    // Build userId filter based on postType
     let userIdFilter = { $nin: blockedIds };
 
     if (postType === "admin") {
@@ -266,9 +274,9 @@ const getPosts = async (req, res) => {
         _id: { $nin: reportedPostIds } 
       })
       .sort({ createdAt: -1 })
-      .populate("userId", "fullname") 
+      .populate("userId", "fullname profileImage") // Yahan profileImage populate kar di hai
       .populate("categoryId", "title description image date")
-      .populate("comments.userId", "fullname");
+      .populate("comments.userId", "fullname profileImage");
 
     const formattedPosts = posts.map(post => {
       const filteredComments = post.comments
@@ -280,6 +288,7 @@ const getPosts = async (req, res) => {
           _id: comment._id,
           text: comment.text,
           userName: comment.userId ? comment.userId.fullname : "Deleted User",
+          userImage: comment.userId ? comment.userId.profileImage : null,
           userId: comment.userId ? (comment.userId._id || comment.userId) : null,
           createdAt: comment.createdAt
         }));
@@ -289,6 +298,7 @@ const getPosts = async (req, res) => {
         description: post.description,
         category: post.categoryId,
         postBy: post.userId ? post.userId.fullname : "Admin",
+        userImage: post.userId ? post.userId.profileImage : null, // Post karne wale user ki image
         image: post.image,
         videoPlaybackId: post.videoPlaybackId,
         videoAssetId: post.videoAssetId,
@@ -308,7 +318,6 @@ const getPosts = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
 
 const getPostsCount = async (req, res) => {
   try {
@@ -349,15 +358,16 @@ const getBookmarkedPosts = async (req, res) => {
 
     const posts = await CommunityPost.find({ bookmarkedBy: userId, userId: { $nin: blockedIds } })
       .sort({ createdAt: -1 })
-      .populate("userId", "fullname")
+      .populate("userId", "fullname profileImage") // Yahan bhi profileImage populate ki hai
       .populate("categoryId", "title description image date")
-      .populate("comments.userId", "fullname");
+      .populate("comments.userId", "fullname profileImage");
 
     const formattedPosts = posts.map(post => ({
       _id: post._id,
       description: post.description,
       category: post.categoryId,
       postBy: post.userId ? post.userId.fullname : "Unknown",
+      userImage: post.userId ? post.userId.profileImage : null, // Bookmarked post ke author ki image
       image: post.image,
       videoPlaybackId: post.videoPlaybackId,
       videoAssetId: post.videoAssetId,
@@ -370,6 +380,7 @@ const getBookmarkedPosts = async (req, res) => {
           _id: comment._id,
           text: comment.text,
           userName: comment.userId ? comment.userId.fullname : "Deleted User",
+          userImage: comment.userId ? comment.userId.profileImage : null,
           userId: comment.userId ? comment.userId._id : null,
           createdAt: comment.createdAt
         })),
