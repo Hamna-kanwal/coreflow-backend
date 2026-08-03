@@ -57,6 +57,43 @@ const register = async (req, res) => {
       emailVerifyExpires: verifyExpires,
     });
 
+    // ✅ YEH MISSING THA — verification email register k time bhejna zaroori hai
+    try {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.hostinger.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        }
+      });
+
+      const verifyUrl = `${req.protocol}://${req.get('host')}/api/v1/users/verify-email/${verifyToken}`;
+
+      await transporter.sendMail({
+        from: `"CoreFlowFit" <${process.env.EMAIL_USER}>`,
+        to: user.email,
+        subject: "Verify your email",
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px;">
+            <h2 style="color: #333;">Email Verification</h2>
+            <p>Thanks for registering, ${user.fullname}. Please click below to verify your account:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${verifyUrl}" 
+                 style="background-color: #4CAF50; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                 Verify Email Now
+              </a>
+            </div>
+            <p style="color: #999; font-size: 12px;">This link will expire in 15 minutes. If you did not request this, please ignore this email.</p>
+          </div>
+        `
+      });
+    } catch (mailErr) {
+      // Agar email fail bhi ho jaye, user create ho chuka hai — sirf log karo
+      console.error("REGISTER EMAIL SEND ERROR 👉", mailErr);
+    }
+
     return res.status(201).json({
       message: "Registered successfully, check your email to verify",
       success: true,
