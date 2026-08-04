@@ -25,13 +25,6 @@ const createPost = async (req, res) => {
     if (!categoryExists) return res.status(404).json({ success: false, message: "Category not found" });
 
     const cleanDescription = description.trim();
-    if (!/^[A-Za-z0-9 ,.]+$/.test(cleanDescription))
-      return res.status(400).json({ success: false, message: "Description can contain only letters, numbers, spaces, commas, and dots" });
-
-    const existingPost = await CommunityPost.findOne({
-      description: { $regex: new RegExp(`^${cleanDescription}$`, "i") },
-    });
-    if (existingPost) return res.status(400).json({ success: false, message: "Description already exists" });
 
     let imageUrl = null;
     let videoUrl = null;
@@ -125,11 +118,6 @@ const updatePost = async (req, res) => {
 
     if (description !== undefined) {
       const cleanDescription = description.trim();
-      if (!/^[A-Za-z0-9 ,.]+$/.test(cleanDescription))
-        return res.status(400).json({ success: false, message: "Invalid characters in description" });
-
-      const duplicateDesc = await CommunityPost.findOne({ description: cleanDescription, _id: { $ne: id } });
-      if (duplicateDesc) return res.status(400).json({ success: false, message: "Description already exists" });
 
       if (cleanDescription !== post.description) {
         post.description = cleanDescription;
