@@ -1,15 +1,13 @@
 const Blog = require("../model/blog");
 const mongoose = require("mongoose");
 
-// Helper function to validate MongoDB ID
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // 1. Create Blog
 const createBlog = async (req, res) => {
   try {
-    const { title, description, image, pagetitle, pageDescription, keywords, tag } = req.body;
+    const { title, description, image, pagetitle, pageDescription, keywords } = req.body;
 
-    // Har field ka alag check
     if (!title) {
       return res.status(400).json({ success: false, message: "Title is required" });
     }
@@ -19,12 +17,7 @@ const createBlog = async (req, res) => {
     if (!image) {
       return res.status(400).json({ success: false, message: "Image is required" });
     }
-  
-    if (!tag) {
-      return res.status(400).json({ success: false, message: "Tag is required" });
-    }
 
-    // Base64 format validation
     if (typeof image === 'string' && !image.startsWith("data:image/")) {
       return res.status(400).json({ 
         success: false, 
@@ -39,7 +32,6 @@ const createBlog = async (req, res) => {
       pagetitle,
       pageDescription: pageDescription || null,
       keywords: keywords || null,
-      tag
     });
 
     res.status(201).json({ success: true, message: "Blog created successfully", blog });
@@ -55,18 +47,16 @@ const updateBlog = async (req, res) => {
     const { id } = req.params;
     if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid Blog ID" });
 
-    const { title, description, image, pagetitle, pageDescription, keywords, tag } = req.body;
+    const { title, description, image, pagetitle, pageDescription, keywords } = req.body;
 
     const blog = await Blog.findById(id);
     if (!blog) return res.status(404).json({ success: false, message: "Blog not found" });
 
-    // Updating fields only if they are provided
     if (title) blog.title = title;
     if (description) blog.description = description;
     if (pagetitle) blog.pagetitle = pagetitle;
-    if (tag) blog.tag = tag;
     if (image) blog.image = image;
-    
+
     blog.pageDescription = pageDescription !== undefined ? pageDescription : blog.pageDescription;
     blog.keywords = keywords !== undefined ? keywords : blog.keywords;
 
@@ -121,16 +111,12 @@ const deleteBlog = async (req, res) => {
   }
 };
 
-// 6. Get Related Blogs
+// 6. Get Related Blogs (ab tag ke bagair — sirf latest 3, current blog ko chhod kar)
 const getRelatedBlogs = async (req, res) => {
   try {
     const { id } = req.params;
-    const { tag } = req.query;
-
-    if (!tag) return res.status(400).json({ success: false, message: "Tag is required" });
 
     const related = await Blog.find({
-      tag: tag,
       _id: { $ne: id }
     })
     .limit(3)
@@ -142,6 +128,7 @@ const getRelatedBlogs = async (req, res) => {
     res.status(500).json({ success: false, message: "Error fetching related blogs" });
   }
 };
+
 // ---------- GET TOTAL BLOGS COUNT ----------
 const getBlogCount = async (req, res) => {
   try {
@@ -159,6 +146,7 @@ const getBlogCount = async (req, res) => {
     });
   }
 };
+
 module.exports = {
   createBlog,
   updateBlog,

@@ -7,7 +7,6 @@ const blogSchema = new mongoose.Schema({
   pagetitle: { type: String, default: null },
   pageDescription: { type: String, default: null },
   keywords: { type: String, default: null },
-  tag: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
 

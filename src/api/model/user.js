@@ -15,6 +15,15 @@ const userSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false },
     isSubscriptionActive: { type: Boolean, default: false },
     subscriptionEndDate: { type: Date, default: null },
+
+    // ---- NAYE FIELDS ----
+    subscriptionPlan: {
+      type: String,
+      enum: ["monthly", "six_months", "twelve_months", null],
+      default: null,
+    },
+    subscriptionStartDate: { type: Date, default: null },
+
     freeVideosCount: { type: Number, default: 0 },
     emailVerifyToken: String,
     emailVerifyExpires: Date,
