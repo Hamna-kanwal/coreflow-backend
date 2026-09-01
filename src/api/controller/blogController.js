@@ -6,10 +6,19 @@ const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 // 1. Create Blog
 const createBlog = async (req, res) => {
   try {
-    const { title, description, image, pagetitle, pageDescription, keywords } = req.body;
+    const { title, slug, description, image, pagetitle, pageDescription, keywords } = req.body;
 
     if (!title) {
       return res.status(400).json({ success: false, message: "Title is required" });
+    }
+    if (!slug) {
+      return res.status(400).json({ success: false, message: "Slug is required" });
+    }
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      return res.status(400).json({
+        success: false,
+        message: "Slug can only contain lowercase letters, numbers, and hyphens (e.g. my-blog-title)"
+      });
     }
     if (!description) {
       return res.status(400).json({ success: false, message: "Description is required" });
@@ -25,8 +34,15 @@ const createBlog = async (req, res) => {
       });
     }
 
+    // Check duplicate slug
+    const existingSlug = await Blog.findOne({ slug });
+    if (existingSlug) {
+      return res.status(400).json({ success: false, message: "This slug is already in use, please choose another" });
+    }
+
     const blog = await Blog.create({
       title,
+      slug,
       description,
       image,
       pagetitle,
@@ -47,10 +63,24 @@ const updateBlog = async (req, res) => {
     const { id } = req.params;
     if (!isValidId(id)) return res.status(400).json({ success: false, message: "Invalid Blog ID" });
 
-    const { title, description, image, pagetitle, pageDescription, keywords } = req.body;
+    const { title, slug, description, image, pagetitle, pageDescription, keywords } = req.body;
 
     const blog = await Blog.findById(id);
     if (!blog) return res.status(404).json({ success: false, message: "Blog not found" });
+
+    if (slug && slug !== blog.slug) {
+      if (!/^[a-z0-9-]+$/.test(slug)) {
+        return res.status(400).json({
+          success: false,
+          message: "Slug can only contain lowercase letters, numbers, and hyphens (e.g. my-blog-title)"
+        });
+      }
+      const existingSlug = await Blog.findOne({ slug, _id: { $ne: id } });
+      if (existingSlug) {
+        return res.status(400).json({ success: false, message: "This slug is already in use, please choose another" });
+      }
+      blog.slug = slug;
+    }
 
     if (title) blog.title = title;
     if (description) blog.description = description;
@@ -95,6 +125,22 @@ const getBlogById = async (req, res) => {
   }
 };
 
+// 4b. Get single blog by SLUG (frontend ke slug page ke liye)
+const getBlogBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    if (!slug) return res.status(400).json({ success: false, message: "Slug is required" });
+
+    const blog = await Blog.findOne({ slug });
+    if (!blog) return res.status(404).json({ success: false, message: "Blog not found" });
+
+    res.status(200).json({ success: true, blog });
+  } catch (err) {
+    console.error("GET BLOG BY SLUG ERROR:", err.message);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 // 5. Delete blog
 const deleteBlog = async (req, res) => {
   try {
@@ -111,7 +157,7 @@ const deleteBlog = async (req, res) => {
   }
 };
 
-// 6. Get Related Blogs (ab tag ke bagair — sirf latest 3, current blog ko chhod kar)
+// 6. Get Related Blogs
 const getRelatedBlogs = async (req, res) => {
   try {
     const { id } = req.params;
@@ -152,6 +198,7 @@ module.exports = {
   updateBlog,
   getAllBlogs,
   getBlogById,
+  getBlogBySlug,
   deleteBlog,
   getRelatedBlogs,
   getBlogCount
