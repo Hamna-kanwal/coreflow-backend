@@ -13,6 +13,34 @@ const cloudinary = require("../utils/cloudinary");
 const SubExercise = require("../model/subexercises");
 const specialEmails = ["atillar8@gmail.com"];
 
+// ---- SUBSCRIPTION PLANS (config file ki bajaye yahin) ----
+const SUBSCRIPTION_PLANS = {
+  monthly: {
+    label: "Monthly",
+    basePrice: 197,
+    discountPercent: 0,
+    durationDays: 30,
+  },
+  six_months: {
+    label: "6 Months",
+    basePrice: 197 * 6,
+    discountPercent: 10,
+    durationDays: 182,
+  },
+  twelve_months: {
+    label: "12 Months",
+    basePrice: 197 * 12,
+    discountPercent: 20,
+    durationDays: 365,
+  },
+};
+
+function getPlanAmountInCents(planKey) {
+  const plan = SUBSCRIPTION_PLANS[planKey];
+  if (!plan) return null;
+  const finalPrice = plan.basePrice * (1 - plan.discountPercent / 100);
+  return Math.round(finalPrice * 100);
+}
 
 const register = async (req, res) => {
   try {
@@ -57,7 +85,6 @@ const register = async (req, res) => {
       emailVerifyExpires: verifyExpires,
     });
 
-    // ✅ YEH MISSING THA — verification email register k time bhejna zaroori hai
     try {
       const transporter = nodemailer.createTransport({
         host: "smtp.hostinger.com",
@@ -90,7 +117,6 @@ const register = async (req, res) => {
         `
       });
     } catch (mailErr) {
-      // Agar email fail bhi ho jaye, user create ho chuka hai — sirf log karo
       console.error("REGISTER EMAIL SEND ERROR 👉", mailErr);
     }
 
@@ -113,7 +139,6 @@ const verifyEmail = async (req, res) => {
       emailVerifyExpires: { $gt: Date.now() }
     });
 
-    // 1. If Link is Expired or Invalid
     if (!user) {
       res.setHeader('Content-Type', 'text/html');
       return res.status(400).send(`
@@ -143,7 +168,6 @@ const verifyEmail = async (req, res) => {
       `);
     }
 
-    // 2. Verification Successful
     user.isVerified = true;
     user.emailVerifyToken = undefined;
     user.emailVerifyExpires = undefined;
@@ -180,6 +204,7 @@ const verifyEmail = async (req, res) => {
     res.status(500).send("Server Error");
   }
 };
+
 const userLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -189,8 +214,7 @@ const userLogin = async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    
-    // 🔥 POPULATE check
+
     const user = await User.findOne({ email: normalizedEmail }).populate("selectTraining");
 
     if (!user) {
@@ -201,15 +225,6 @@ const userLogin = async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid password", success: false });
     }
-
-    // ---------------- DEBUG LOGS START ----------------
-    console.log("-----------------------------------------");
-    console.log("1. User object from DB (Raw):", user._id);
-    console.log("2. selectTraining field content:", user.selectTraining);
-    console.log("3. usertraining field content:", user.usertraining);
-    console.log("4. Type of selectTraining:", typeof user.selectTraining);
-    console.log("-----------------------------------------");
-    // ---------------- DEBUG LOGS END ------------------
 
     if (!user.isVerified) {
       return res.status(401).json({ message: "Please verify your email first", success: false });
@@ -235,7 +250,6 @@ const userLogin = async (req, res) => {
     
     const userSelections = await UserTraining.find({ userId: user._id }).populate("trainingId");
 
-    // --- LOGIC: Agar email special list mein hai to force true karein ---
     const isSpecialUser = specialEmails.includes(normalizedEmail);
 
     return res.status(200).json({
@@ -254,9 +268,9 @@ const userLogin = async (req, res) => {
         address: user.address || "Not set",
         profileImage: user.profileImage || "",
         level: user.level || "Not set",
-        // Yahan logic update ho gaya hai:
         isSubscriptionActive: isSpecialUser ? true : (user.isSubscriptionActive || false),
         subscriptionEndDate: user.subscriptionEndDate || null,
+        subscriptionPlan: user.subscriptionPlan || null,
         selectedTrainings: userSelections.map(selection => selection.trainingId)
       }
     });
@@ -331,7 +345,6 @@ const UpdateProfile = async (req, res) => {
     }
 
     if (email) {
-      // CHANGED: Removed Gmail-only restriction in profile update too
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email.trim().toLowerCase())) {
         return res.status(400).json({ message: "Invalid email format.", success: false });
@@ -363,12 +376,11 @@ const deleteUser = async (req, res) => {
   await User.findByIdAndDelete(req.params.id);
   res.json({ message: "User deleted successfully" });
 };
+
 const deleteUserAccount = async (req, res) => {
   try {
-    // 1. Get user ID from the token (No ID needed in URL/Params)
     const userId = req.user.id;
 
-    // 2. Check if user exists (to prevent double deletion)
     const user = await User.findById(userId);
 
     if (!user) {
@@ -378,17 +390,14 @@ const deleteUserAccount = async (req, res) => {
       });
     }
 
-    // 3. Delete only the user account
     await User.findByIdAndDelete(userId);
 
-    // 4. Success Response
     res.status(200).json({ 
       success: true, 
       message: "Your account has been deleted successfully." 
     });
 
   } catch (error) {
-    // Log the error for your terminal debugging
     console.error("DELETE_USER_ERROR:", error.message);
 
     res.status(500).json({ 
@@ -397,7 +406,6 @@ const deleteUserAccount = async (req, res) => {
     });
   }
 };
-
 
 const getExercisesWithSubCount = async (req, res) => {
   try {
@@ -468,18 +476,17 @@ const checkUserPaymentStatus = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    // --- LOGIC: Bypass check for special users ---
     const isSpecialUser = specialEmails.includes(user.email.toLowerCase());
 
     if (isSpecialUser) {
       return res.status(200).json({ success: true, canWatch: true, status: "paid" });
     }
-    // ----------------------------------------------
 
     const now = new Date();
     if (user.isSubscriptionActive && user.subscriptionEndDate && user.subscriptionEndDate < now) {
       user.isSubscriptionActive = false;
       user.subscriptionEndDate = null;
+      user.subscriptionPlan = null;
       await user.save();
     }
 
@@ -512,13 +519,11 @@ const incrementVideoCount = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    // --- LOGIC: Bypass check for special users ---
     const isSpecialUser = specialEmails.includes(user.email.toLowerCase());
 
     if (isSpecialUser || user.isSubscriptionActive) {
       return res.status(200).json({ success: true, message: "Premium user: No limit applied." });
     }
-    // ----------------------------------------------
 
     if (user.freeVideosCount < 1) {
       user.freeVideosCount += 1;
@@ -532,29 +537,37 @@ const incrementVideoCount = async (req, res) => {
   }
 };
 
+// ---- UPDATED ----
 const createPaymentIntent = async (req, res) => {
   try {
-    const userId = req.user.id; 
-    const { amount, currency } = req.body;
-    if (!amount) {
-      return res.status(400).json({ success: false, message: "Amount is required" });
+    const userId = req.user.id;
+    const { plan } = req.body; // "monthly" | "six_months" | "twelve_months"
+
+    if (!plan || !SUBSCRIPTION_PLANS[plan]) {
+      return res.status(400).json({ success: false, message: "Invalid or missing plan" });
     }
+
+    const amountInCents = getPlanAmountInCents(plan);
+
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount,
-      currency: currency || "usd",
+      amount: amountInCents,
+      currency: "usd",
       payment_method_types: ["card"],
-      metadata: { userId }
+      metadata: { userId, plan }
     });
     res.status(200).json({
       success: true,
       clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id
+      paymentIntentId: paymentIntent.id,
+      plan,
+      amount: amountInCents / 100
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Unable to create PaymentIntent" });
   }
 };
 
+// ---- UPDATED ----
 const verifyMobilePayment = async (req, res) => {
   try {
     const { paymentIntentId } = req.body;
@@ -564,9 +577,21 @@ const verifyMobilePayment = async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     if (paymentIntent.status === "succeeded") {
+      const plan = paymentIntent.metadata.plan;
+      const planConfig = SUBSCRIPTION_PLANS[plan];
+
+      if (!planConfig) {
+        return res.status(400).json({ paymentStatus: false, message: "Unknown plan on payment" });
+      }
+
+      const now = new Date();
+      const endDate = new Date(now.getTime() + planConfig.durationDays * 24 * 60 * 60 * 1000);
+
       await User.findByIdAndUpdate(req.user.id, {
         isSubscriptionActive: true,
-        subscriptionEndDate: new Date(Date.now() + 30*24*60*60*1000)
+        subscriptionPlan: plan,
+        subscriptionStartDate: now,
+        subscriptionEndDate: endDate
       });
 
       const user = await User.findById(req.user.id);
@@ -575,10 +600,12 @@ const verifyMobilePayment = async (req, res) => {
         userId: user._id,
         sessionId: paymentIntent.id,
         amount: paymentIntent.amount,
-        status: "succeeded"
+        status: "succeeded",
+        plan,
+        discountPercent: planConfig.discountPercent,
+        durationDays: planConfig.durationDays
       });
 
-      // CHANGED: Updated to Hostinger SMTP in payment verification too
       const transporter = nodemailer.createTransport({
         host: "smtp.hostinger.com",
         port: 465,
@@ -596,16 +623,18 @@ const verifyMobilePayment = async (req, res) => {
         html: `
           <h2>Payment Confirmation</h2>
           <p>Dear ${user.fullname},</p>
-          <p>Your payment of $${paymentIntent.amount / 100} has been successfully received.</p>
-          <p>Your subscription is now active for 30 days.</p>
+          <p>Your payment of $${(paymentIntent.amount / 100).toFixed(2)} has been successfully received.</p>
+          <p>Plan: <b>${planConfig.label}</b>${planConfig.discountPercent ? ` (${planConfig.discountPercent}% discount applied)` : ""}</p>
+          <p>Your subscription is now active until <b>${endDate.toDateString()}</b>.</p>
           <p>Thank you for your purchase ❤️</p>
         `
       });
 
-      return res.status(200).json({ paymentStatus: true });
+      return res.status(200).json({ paymentStatus: true, plan, subscriptionEndDate: endDate });
     }
     res.status(200).json({ paymentStatus: false });
   } catch (error) {
+    console.error("VERIFY PAYMENT ERROR 👉", error);
     res.status(500).json({ paymentStatus: false });
   }
 };
@@ -705,6 +734,7 @@ const getSecureDownloadLink = async (req, res) => {
     return res.status(500).json({ message: "Internal server error", success: false });
   }
 };
+
 const resendVerificationEmail = async (req, res) => {
   try {
     const { email } = req.body;
@@ -723,16 +753,13 @@ const resendVerificationEmail = async (req, res) => {
       return res.status(400).json({ message: "This account is already verified. Please login.", success: false });
     }
 
-    // Generate new token and expiry (15 minutes)
     const newVerifyToken = crypto.randomBytes(32).toString("hex");
     const newVerifyExpires = new Date(Date.now() + 15 * 60 * 1000); 
 
-    // Update user record in the database
     user.emailVerifyToken = newVerifyToken;
     user.emailVerifyExpires = newVerifyExpires;
     await user.save();
 
-    // Email Transporter Configuration (Hostinger)
     const transporter = nodemailer.createTransport({
       host: "smtp.hostinger.com",
       port: 465,
