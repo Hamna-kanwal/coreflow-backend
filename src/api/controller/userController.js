@@ -11,7 +11,7 @@ const mongoose = require("mongoose");
 const Payment = require("../model/payment");
 const cloudinary = require("../utils/cloudinary");
 const SubExercise = require("../model/subexercises");
-const specialEmails = ["atillar8@gmail.com"];
+const specialEmails = ["atillar8@gmail.com", "billysamjay@gmail.com", "htmlaw.uk@gmail.com"];
 
 // ---- SUBSCRIPTION PLANS (config file ki bajaye yahin) ----
 const SUBSCRIPTION_PLANS = {
