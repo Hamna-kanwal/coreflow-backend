@@ -1,5 +1,6 @@
 const Blog = require("../model/blog");
 const mongoose = require("mongoose");
+const cloudinary = require("../utils/cloudinary.js"); // Ya jahan se aapka cloudinary import hota hai
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -27,24 +28,39 @@ const createBlog = async (req, res) => {
       return res.status(400).json({ success: false, message: "Image is required" });
     }
 
-    if (typeof image === 'string' && !image.startsWith("data:image/")) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid image format. Must be a valid base64 string" 
-      });
-    }
-
     // Check duplicate slug
     const existingSlug = await Blog.findOne({ slug });
     if (existingSlug) {
       return res.status(400).json({ success: false, message: "This slug is already in use, please choose another" });
     }
 
+    // Image Validation & Cloudinary Upload (Exercise controller style)
+    const base64ImageRegex = /^data:image\/(jpeg|jpg|png|webp);base64,/;
+    let finalImageUrl = image;
+
+    if (typeof image === 'string' && base64ImageRegex.test(image)) {
+      const uploadResult = await cloudinary.uploader.upload(image, { 
+        folder: "blogs/images" 
+      });
+      finalImageUrl = uploadResult.secure_url;
+    } else if (typeof image === 'string' && image.startsWith("data:image/")) {
+      // Agar koi aur format ho jo regex mein cover na ho lekin data:image se start ho
+      const uploadResult = await cloudinary.uploader.upload(image, { 
+        folder: "blogs/images" 
+      });
+      finalImageUrl = uploadResult.secure_url;
+    } else {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Invalid image format" 
+      });
+    }
+
     const blog = await Blog.create({
       title,
       slug,
       description,
-      image,
+      image: finalImageUrl,
       pagetitle,
       pageDescription: pageDescription || null,
       keywords: keywords || null,
@@ -52,7 +68,7 @@ const createBlog = async (req, res) => {
 
     res.status(201).json({ success: true, message: "Blog created successfully", blog });
   } catch (err) {
-    console.error("CREATE BLOG ERROR:", err.message);
+    console.error("CREATE BLOG ERROR:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
@@ -85,7 +101,17 @@ const updateBlog = async (req, res) => {
     if (title) blog.title = title;
     if (description) blog.description = description;
     if (pagetitle) blog.pagetitle = pagetitle;
-    if (image) blog.image = image;
+
+    // Image Update Logic
+    if (image) {
+      if (typeof image === "string" && (image.startsWith("data:image") || /^data:image\/(jpeg|jpg|png|webp);base64,/.test(image))) {
+        const result = await cloudinary.uploader.upload(image, { folder: "blogs/images" });
+        blog.image = result.secure_url;
+      } else {
+        // Agar image url ki form mein hai to wese hi rehne dein
+        blog.image = image;
+      }
+    }
 
     blog.pageDescription = pageDescription !== undefined ? pageDescription : blog.pageDescription;
     blog.keywords = keywords !== undefined ? keywords : blog.keywords;
@@ -93,7 +119,7 @@ const updateBlog = async (req, res) => {
     await blog.save();
     res.status(200).json({ success: true, message: "Blog updated successfully", blog });
   } catch (err) {
-    console.error("UPDATE BLOG ERROR:", err.message);
+    console.error("UPDATE BLOG ERROR:", err);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
