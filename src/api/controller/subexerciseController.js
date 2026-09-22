@@ -6,7 +6,7 @@ const User = require("../model/user");
 const VideoProgress = require("../model/videoprogress");
 
 // ----------------------
-// AUDIO STATUS NORMALIZER
+// AUDIO STATUS NORMALIZER (for INCOMING requests — create/update)
 // Frontend/Mux se in 5 mein se koi bhi key aa sakti hai:
 // hasAudio, hasSound, isSilent, audioMuted (naye) + isMuted (already existing)
 // Return: true = audio hai, false = silent/muted, undefined = koi key nahi mili
@@ -28,6 +28,18 @@ function resolveHasAudio(body) {
     return !(body.isMuted === true || body.isMuted === "true");
 
   return undefined;
+}
+
+// ----------------------
+// AUDIO FIELDS BUILDER (for OUTGOING responses — GET APIs)
+// isMuted aur hasAudio dono bhejta hai taake frontend ka jo bhi naming check ho, match ho jaye
+// ----------------------
+function buildAudioFields(isMuted) {
+  const muted = isMuted || false;
+  return {
+    isMuted: muted,
+    hasAudio: !muted,
+  };
 }
 
 // ----------------------
@@ -313,7 +325,7 @@ const getSubExercises = async (req, res, next) => {
         ? `https://stream.mux.com/${s.videoPlaybackId}.m3u8`
         : null,
       isLiked: s.likedBy.includes(userId),
-      isMuted: s.isMuted || false,
+      ...buildAudioFields(s.isMuted),
     }));
 
     res.json({ success: true, subExercises: data });
@@ -378,7 +390,7 @@ const getLikedSubExercises = async (req, res, next) => {
         thumbnail: s.videoPlaybackId
           ? `https://image.mux.com/${s.videoPlaybackId}/thumbnail.jpg?width=600&height=400&fit_mode=pad`
           : null,
-        isMuted: s.isMuted || false,
+        ...buildAudioFields(s.isMuted),
       })),
     });
   } catch (error) {
@@ -460,7 +472,7 @@ const getSubExerciseswithsummary = async (req, res, next) => {
       level: s.level || "Not set",
       video: s.videoPlaybackId ? `https://stream.mux.com/${s.videoPlaybackId}.m3u8` : null,
       thumbnail: s.videoPlaybackId ? `https://image.mux.com/${s.videoPlaybackId}/thumbnail.jpg` : null,
-      isMuted: s.isMuted || false,
+      ...buildAudioFields(s.isMuted),
     }));
 
     return res.status(200).json({ 
@@ -511,7 +523,7 @@ const updateAndGetVideoProgress = async (req, res, next) => {
         watchedDate: item.updatedAt, 
         videoUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null,
         thumbnail: playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : null,
-        isMuted: item.subExerciseId?.isMuted || false,
+        ...buildAudioFields(item.subExerciseId?.isMuted),
       };
     });
 
@@ -550,7 +562,7 @@ const getTopResumeVideos = async (req, res, next) => {
           watchedDate: item.updatedAt, 
           videoUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null,
           thumbnail: playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : null,
-          isMuted: item.subExerciseId?.isMuted || false,
+          ...buildAudioFields(item.subExerciseId?.isMuted),
         };
       });
 
