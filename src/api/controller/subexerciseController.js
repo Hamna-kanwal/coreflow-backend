@@ -2,9 +2,33 @@ const mongoose = require("mongoose");
 const SubExercise = require("../model/subexercises");
 const Training = require("../model/admintraining");
 const mux = require("../utils/mux");
-const User = require("../model/user"); 
+const User = require("../model/user");
 const VideoProgress = require("../model/videoprogress");
 
+// ----------------------
+// AUDIO STATUS NORMALIZER
+// Frontend/Mux se in 5 mein se koi bhi key aa sakti hai:
+// hasAudio, hasSound, isSilent, audioMuted (naye) + isMuted (already existing)
+// Return: true = audio hai, false = silent/muted, undefined = koi key nahi mili
+// ----------------------
+function resolveHasAudio(body) {
+  if (body.hasAudio !== undefined)
+    return body.hasAudio === true || body.hasAudio === "true";
+
+  if (body.hasSound !== undefined)
+    return body.hasSound === true || body.hasSound === "true";
+
+  if (body.audioMuted !== undefined)
+    return !(body.audioMuted === true || body.audioMuted === "true");
+
+  if (body.isSilent !== undefined)
+    return !(body.isSilent === true || body.isSilent === "true");
+
+  if (body.isMuted !== undefined)
+    return !(body.isMuted === true || body.isMuted === "true");
+
+  return undefined;
+}
 
 // ----------------------
 // CREATE SUBEXERCISE
@@ -43,10 +67,16 @@ const createSubExercise = async (req, res, next) => {
     if (duplicate)
       return res.status(400).json({ message: "SubExercise already exists" });
 
+    // Audio status resolve karna — 5 keys mein se jo bhi mili
+    const resolvedHasAudio = resolveHasAudio(req.body);
+    const finalIsMuted = resolvedHasAudio === undefined
+      ? (isMuted === true || isMuted === "true")
+      : !resolvedHasAudio;
+
     const newSubExercise = await SubExercise.create({
       title: cleanTitle,
       description: description.trim(),
-      isMuted: isMuted || false,
+      isMuted: finalIsMuted,
       mainExerciseId,
       trainingId: trainingId || null,
       videoPlaybackId: videoPlaybackId || null,
@@ -100,8 +130,14 @@ const updateSubExercise = async (req, res, next) => {
     
     if (isLiked !== undefined)
       sub.isLiked = isLiked === true || isLiked === "true";
-    
-    if (isMuted !== undefined) sub.isMuted = isMuted;
+
+    // Audio status resolve karna — 5 keys mein se jo bhi mili
+    const resolvedHasAudio = resolveHasAudio(req.body);
+    if (resolvedHasAudio !== undefined) {
+      sub.isMuted = !resolvedHasAudio;
+    } else if (isMuted !== undefined) {
+      sub.isMuted = isMuted === true || isMuted === "true";
+    }
 
     await sub.save();
 
@@ -277,6 +313,7 @@ const getSubExercises = async (req, res, next) => {
         ? `https://stream.mux.com/${s.videoPlaybackId}.m3u8`
         : null,
       isLiked: s.likedBy.includes(userId),
+      isMuted: s.isMuted || false,
     }));
 
     res.json({ success: true, subExercises: data });
@@ -327,7 +364,7 @@ const getLikedSubExercises = async (req, res, next) => {
     // "thumbnailPlaybackId" agar alag se save hai toh wo bhi select karein, 
     // warna videoPlaybackId se hi thumbnail ban jayega.
     const likedSubs = await SubExercise.find({ likedBy: userId })
-      .select("title videoPlaybackId");
+      .select("title videoPlaybackId isMuted");
 
     res.status(200).json({
       success: true,
@@ -341,6 +378,7 @@ const getLikedSubExercises = async (req, res, next) => {
         thumbnail: s.videoPlaybackId
           ? `https://image.mux.com/${s.videoPlaybackId}/thumbnail.jpg?width=600&height=400&fit_mode=pad`
           : null,
+        isMuted: s.isMuted || false,
       })),
     });
   } catch (error) {
@@ -421,7 +459,8 @@ const getSubExerciseswithsummary = async (req, res, next) => {
       description: s.description,
       level: s.level || "Not set",
       video: s.videoPlaybackId ? `https://stream.mux.com/${s.videoPlaybackId}.m3u8` : null,
-      thumbnail: s.videoPlaybackId ? `https://image.mux.com/${s.videoPlaybackId}/thumbnail.jpg` : null
+      thumbnail: s.videoPlaybackId ? `https://image.mux.com/${s.videoPlaybackId}/thumbnail.jpg` : null,
+      isMuted: s.isMuted || false,
     }));
 
     return res.status(200).json({ 
@@ -457,7 +496,7 @@ const updateAndGetVideoProgress = async (req, res, next) => {
     const allProgress = await VideoProgress.find({ userId })
       .populate({
         path: "subExerciseId",
-        select: "title videoPlaybackId"
+        select: "title videoPlaybackId isMuted"
       })
       .sort({ updatedAt: -1 });
 
@@ -471,7 +510,8 @@ const updateAndGetVideoProgress = async (req, res, next) => {
         // Chart ke liye date field add kar di gayi hai
         watchedDate: item.updatedAt, 
         videoUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null,
-        thumbnail: playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : null
+        thumbnail: playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : null,
+        isMuted: item.subExerciseId?.isMuted || false,
       };
     });
 
@@ -492,7 +532,7 @@ const getTopResumeVideos = async (req, res, next) => {
     const allProgress = await VideoProgress.find({ userId })
       .populate({
         path: "subExerciseId",
-        select: "title videoPlaybackId" 
+        select: "title videoPlaybackId isMuted" 
       })
       .sort({ updatedAt: -1 })
       .limit(6);
@@ -509,7 +549,8 @@ const getTopResumeVideos = async (req, res, next) => {
           // Yahan bhi date add kar di hai
           watchedDate: item.updatedAt, 
           videoUrl: playbackId ? `https://stream.mux.com/${playbackId}.m3u8` : null,
-          thumbnail: playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : null
+          thumbnail: playbackId ? `https://image.mux.com/${playbackId}/thumbnail.jpg` : null,
+          isMuted: item.subExerciseId?.isMuted || false,
         };
       });
 
