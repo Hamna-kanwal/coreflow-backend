@@ -238,12 +238,12 @@ const userLogin = async (req, res) => {
     const token = jwt.sign(
       { userId: user._id, is_admin: user.is_admin, level: user.level || "Not set" },
       secretKey,
-      { expiresIn: "1d" }
+      { expiresIn: "7d" }
     );
 
     res.cookie("token", token, { 
       httpOnly: true, 
-      maxAge: 24 * 60 * 60 * 1000, 
+      maxAge: 7 * 24 * 60 * 60 * 1000, 
       sameSite: "lax", 
       secure: false 
     });
@@ -463,7 +463,7 @@ const selectUserLevel = async (req, res) => {
     }
     await User.findByIdAndUpdate(userId, { level });
     const user = await User.findById(userId);
-    const token = jwt.sign({ userId: user._id, is_admin: user.is_admin, level: user.level }, process.env.SECRET_KEY, { expiresIn: "1d" });
+    const token = jwt.sign({ userId: user._id, is_admin: user.is_admin, level: user.level }, process.env.SECRET_KEY, { expiresIn: "7d" });
     res.status(200).json({ success: true, message: "User level updated successfully", token, level: user.level });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });
