@@ -17,19 +17,19 @@ const specialEmails = ["atillar8@gmail.com", "billysamjay@gmail.com", "htmlaw.uk
 const SUBSCRIPTION_PLANS = {
   monthly: {
     label: "Monthly",
-    basePrice: 197,
+    basePrice: 99,
     discountPercent: 0,
     durationDays: 30,
   },
   six_months: {
     label: "6 Months",
-    basePrice: 197 * 6,
+    basePrice: 99 * 6,
     discountPercent: 10,
     durationDays: 182,
   },
   twelve_months: {
     label: "12 Months",
-    basePrice: 197 * 12,
+    basePrice: 99 * 12,
     discountPercent: 20,
     durationDays: 365,
   },
@@ -549,12 +549,12 @@ const createPaymentIntent = async (req, res) => {
 
     const amountInCents = getPlanAmountInCents(plan);
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amountInCents,
-      currency: "usd",
-      payment_method_types: ["card"],
-      metadata: { userId, plan }
-    });
+ const paymentIntent = await stripe.paymentIntents.create({
+  amount: amountInCents,
+  currency: "gbp",
+  payment_method_types: ["card"],
+  metadata: { userId, plan }
+});
     res.status(200).json({
       success: true,
       clientSecret: paymentIntent.client_secret,
@@ -619,14 +619,14 @@ const verifyMobilePayment = async (req, res) => {
       await transporter.sendMail({
         from: `"CoreFlowFit" <${process.env.EMAIL_USER}>`,
         to: user.email,
-        subject: "Payment Successful ✅",
+        subject: "Payment Successful",
         html: `
           <h2>Payment Confirmation</h2>
           <p>Dear ${user.fullname},</p>
-          <p>Your payment of $${(paymentIntent.amount / 100).toFixed(2)} has been successfully received.</p>
+        <p>Your payment of £${(paymentIntent.amount / 100).toFixed(2)} has been successfully received.</p>
           <p>Plan: <b>${planConfig.label}</b>${planConfig.discountPercent ? ` (${planConfig.discountPercent}% discount applied)` : ""}</p>
           <p>Your subscription is now active until <b>${endDate.toDateString()}</b>.</p>
-          <p>Thank you for your purchase ❤️</p>
+          <p>Thank you for your purchase</p>
         `
       });
 
