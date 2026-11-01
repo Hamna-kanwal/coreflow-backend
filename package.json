@@ -27,7 +27,7 @@
     "multer": "^2.2.0",
     "multer-storage-cloudinary": "^2.2.1",
     "next": "^16.2.6",
-    "next-cloudinary": "^6.17.5",
+    "next-cloudinary": "^7.0.0",
     "node-cron": "^4.2.1",
     "node-media-server": "^4.2.4",
     "nodemailer": "^9.0.1",
